@@ -1,0 +1,122 @@
+---
+title: "exp19_26_qPCR"
+author: "YJ"
+date: "July 12, 2019"
+output: html_document
+---
+read shit
+```{r}
+library(tidyverse)
+getwd()
+qpcr<-data.frame(read.csv("exp19_26_CT.csv", stringsAsFactors = FALSE))
+qpcrMeta<-data.frame()
+qpcrMeta<-data.frame(ASO=rep(unique(qpcr[,"ASO"]),each = 3), 
+                     Dose=qpcr[rep(c(FALSE,FALSE,FALSE,TRUE,TRUE,TRUE), 12),"Dose"],
+                     treatment=rep(unique(qpcr[,"treatment"]),each = 3))
+CT<-data.frame(matrix(qpcr$CT, ncol=2, byrow= TRUE))
+colnames(CT)= c("CT1","CT2")
+CT<- data.frame(CT,Gene = rep(c("CFTR","RPL32"), each = 72), qpcrMeta)
+cf = which(CT$Gene == "CFTR")
+rpl = which(CT$Gene == "RPL32")
+```
+set treatments as factors
+```{r}
+ASOtx<-unique(qpcrMeta$ASO)
+ASOtx<-factor(ASOtx, levels = ASOtx)
+CT$ASO<-factor(CT$ASO, levels =ASOtx) ## this was important for setting the order of lm x
+
+```
+
+Find zeros and replace them 
+```{r}
+zero<-data.frame(CT[which(CT[,"CT1"]==0 | CT[,"CT2"]==0),],index=which(CT[,"CT1"]==0 | CT[,"CT2"]==0))
+CT[zero$index,c("CT1","CT2")]<- apply(zero[,c("CT1","CT2")],1,max)
+```
+calculate mean CT
+```{r}
+CT = data.frame(CT, mean_CT=apply(CT[,c("CT1","CT2")],1,mean))
+CT$mean_CT[which(CT$mean_CT == 0)]= CT$mean_CT[which(CT$mean_CT == 0)]+mean(CT$mean_CT)
+```
+calculate delta CT (CFTR - RPL32)
+```{r}
+CT$dCT = CT$mean_CT[cf]-CT$mean_CT[rpl]
+```
+normalize all dCT to dCT of NT (ddCT)
+```{r}
+NTdCT <- mean(CT$dCT[1:3])
+CT$ddCT = CT$dCT-NTdCT
+```
+gene fold change
+```{r}
+CT$fc<-2^(-1*CT$ddCT)
+
+
+```
+
+Analyze by one-way ANOVA with Tukey's test
+```{r}
+plotarea<-CT[CT$Gene=="CFTR",]
+plotarea<-plotarea[CT$mean_CT>28,]
+a1<-aov(log2(fc) ~ ASO, data = plotarea)
+a1Tukey<-TukeyHSD(a1)
+a1pval<-a1Tukey$ASO[,"p adj"]
+
+a1vsNT=data.frame(ASO = ASOtx, pvals = c(0,a1pval[grep("-NT",names(a1pval))]))
+a1vsNT$mean_fc = c(1,2^a1Tukey$ASO[grep("-NT",names(a1pval)),"diff"])
+
+a1vsNT$significance = ifelse(a1vsNT$pvals<0.001,"***",
+                         ifelse(a1vsNT$pvals<0.01,"**",
+                                ifelse(a1vsNT$pvals<0.05,"*",'ns')
+       )
+)
+```
+
+plot fc
+```{r}
+ggplot()+ 
+  geom_boxplot(aes(x = plotarea$ASO,y=plotarea$fc )) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_text(aes(x =a1vsNT$ASO,y=a1vsNT$mean_fc+1.5,label=a1vsNT$significance ))
+```
+
+```{r}
+orders<-order(d[1:23]) # from clustering practice
+ggplot()+ 
+  geom_boxplot(aes(x = plotarea$ASO[],y=plotarea$fc )) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+```
+
+try some clustering
+```{r : help from https://rstudio-pubs-static.s3.amazonaws.com/33876_1d7794d9a86647ca90c4f182df93f0e8.html}
+
+# can't quite figure out what to do. 
+a<-CT[CT$Gene=="CFTR",]
+b<-CT[CT$Gene=="RPL32",]
+
+a[which(a$fc>20),"fc"]<-0
+b[which(a$fc>20),"mean_CT"]<-20
+b$stCT<-sapply(b$mean_CT, function(x){x/mean(b$mean_CT)})
+ab<-cbind(a$fc, b$stCT)
+
+c<-t(matrix(a$fc,nrow=3))
+d<-dist(c)
+
+
+
+wssplot <- function(data, nc, seed=1234){
+  wss <- (nrow(data)-1)*sum(apply(data,2,var))
+  for (i in 2:nc){
+    set.seed(seed)
+    wss[i] <- sum(kmeans(data, centers=i)$withinss)}
+  plot(1:nc, wss, type="b", xlab="Number of Clusters",ylab="Within groups sum of squares")}
+
+wssplot(ab,10) 
+
+H.fit <- hclust(d, method="ward")
+plot(H.fit) # display dendogram
+groups <- cutree(H.fit, k=4) # cut tree into 5 clusters
+# draw dendogram with red borders around the 5 clusters
+rect.hclust(H.fit, k=4, border="red") 
+heatmap(ab,groups))
+```
+

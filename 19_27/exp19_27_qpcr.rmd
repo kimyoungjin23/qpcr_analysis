@@ -1,0 +1,36 @@
+---
+title: "exp19_27"
+author: "YJ"
+date: "July 23, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+getwd()
+library(ggplot2)
+qpcr<-read.csv("exp1927_fc.csv", stringsAsFactors = FALSE)
+qpcr<-qpcr[!is.na(qpcr$fc),]
+qpcr$Tx<-factor(qpcr$Tx, levels = unique(qpcr$Tx))
+qpcr$Gene<-factor(qpcr$Gene, levels = unique(qpcr$Gene))
+genes<-levels(qpcr$Gene)
+qpcr.test<-list()
+
+for(n in 1:length(genes)) {
+  sets<-which(qpcr$Gene == genes[n])
+  qpcr.test[[n]] <- lm(fc ~ Tx,data = qpcr[sets,])
+}
+
+  coef(summary(qpcr.test[[1]]))
+  coef(summary(qpcr.test[[2]]))
+  coef(summary(qpcr.test[[3]]))
+  coef(summary(qpcr.test[[4]]))
+  coef(summary(qpcr.test[[5]]))
+  coef(summary(qpcr.test[[6]]))
+
+ggplot(data = qpcr) + geom_boxplot(aes(x = Gene, y = fc, color = Tx)) + xlab("Genes") +ylab("fold change vs. RPL32") + ylim(0,3)
+```
+

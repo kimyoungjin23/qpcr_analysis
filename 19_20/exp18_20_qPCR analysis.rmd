@@ -1,0 +1,79 @@
+---
+title: "qPCR analysis"
+author: "YJ"
+date: "July 11, 2019"
+output: html_document
+---
+read shit
+```{r setup, include=FALSE}
+qpcr<-data.frame(read.csv("../Book1.csv", stringsAsFactors = FALSE))
+qpcrMeta<-read.csv("../book1.metadata.csv", stringsAsFactors = FALSE)
+```
+put all relative levels data to one column
+```{r}
+qpcr<-unlist(matrix(qpcr))[!is.na(qpcr)] # making it a matrix first gets rid of the sample names and stuff
+qpcrsummary<-data.frame(qpcrMeta,fold_change = qpcr)
+```
+set treatments as factors
+```{r}
+tx<-unique(qpcrsummary$Sample)
+tx<-factor(tx, levels = tx)
+qpcrsummary$Sample<-factor(qpcrsummary$Sample, levels =tx) ## this was important for setting the order of lm x
+mm<-model.matrix(~qpcrsummary$Sample)
+```
+
+perform linear regression
+```{r}
+qlm<-lm(log2(fold_change) ~ qpcrsummary$Sample, data = qpcrsummary)
+```
+
+look at the linear regression summary
+```{r}
+pval<-coef(summary(qlm))[tx,4]
+Results<-data.frame(tx = tx, mean_fold_change = coef(qlm), p.values = pval)
+plot(qpcrsummary$fold_change ~ qpcrsummary$Sample)
+points(2^Results$mean_fold_change, col = "red")
+plot(2^Results$mean_fold_change, Results$p.values)
+abline(h=0.05)
+ggplot(Results, aes(y=2^mean_fold_change, x=-log10(p.values))) + geom_point(aes(color= tx)) + geom_vline(xintercept = -log10(0.05)) + geom_text(aes(label=ifelse(p.values>0.05,as.character(tx),'')),hjust=0,vjust=0)
+```
+Analyze by one-way ANOVA with Tukey's test
+```{r}
+a1<-aov(log2(fold_change) ~ qpcrsummary$Sample, data = qpcrsummary)
+a1Tukey<-TukeyHSD(a1)
+a1pval<-a1Tukey$`qpcrsummary$Sample`[,"p adj"]
+siga1<-a1pval[which(a1pval<0.05)]
+a1summary<-data.frame(comparisons = names(siga1), Tukey_pvals = siga1)
+view(a1summary)
+```
+
+compare lm and ANOVA pvalues
+```{r}
+vs.NT<-grep("-NT",rownames(a1Tukey$`qpcrsummary$Sample` ))
+vNT<-a1Tukey$`qpcrsummary$Sample`[vs.NT,"p adj"]
+# add anova pvals to 'Results'
+Results$Tukey.pvals= c(0.1,as.vector(unlist(vNT)))
+# compare pvalues lm vs. anova-Tukey
+ggplot(Results, aes(y=-log10(Results$p.values), x=-log10(Results$Tukey.pvals))) + geom_point(aes(color= tx)) + geom_vline(xintercept = -log10(0.05), col = "red") + geom_hline(yintercept = -log10(0.05), col = "green")+ geom_text(aes(label=ifelse(Tukey.pvals>0.05,as.character(tx),'')),hjust=0,vjust=1, jitter = TRUE)
+```
+
+plot ANOVA reults
+```{r}
+ggplot(Results[-1,], aes(y=2^mean_fold_change, x=-log10(Tukey.pvals))) + geom_point(aes(color= tx)) + geom_vline(xintercept = -log10(0.05)) +geom_text(aes(label=ifelse(Tukey.pvals>0.05,as.character(tx),'')),hjust=0,vjust=0) +xlab("Tukey P.values") + ylab("CFTR fold change")
+#### variation
+ggplot() + geom_boxplot( aes(y=qpcrsummary$fold_change, x=qpcrsummary$Sample, color=qpcrsummary$Sample))  + theme(axis.text.x = element_text(angle = 45, hjust = 1)) +xlab("Treatments") + ylab("CFTR fold change") +
+  geom_text(aes(x = c(1:15), y = 2^Results$mean_fold_change+sd(2^Results$mean_fold_change),label=
+                  ifelse(Results$Tukey.pvals<0.001,"***",
+                         ifelse(Results$Tukey.pvals<0.01,"**",
+                                ifelse(Results$Tukey.pvals<0.05,"*",'')
+       )
+)) 
+)
+```
+what about adding significance bars?
+```{r, include = FALSE}
+install.packages("ggsinif")
+library(ggsignif)
+
+```
+

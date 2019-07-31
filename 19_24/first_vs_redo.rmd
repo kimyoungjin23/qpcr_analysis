@@ -1,0 +1,52 @@
+---
+title: "19_24_first_vs_redo"
+author: "YJ"
+date: "July 15, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+load summary data
+```{r}
+setwd("C:/Users/My computer/Dropbox/CSHL/R/qpcr_analysis/19_24")
+first<-read.csv("1924_first_qpcr_summary.csv", stringsAsFactors = FALSE)
+second<-read.csv("19_24_redo_qpcr_summary.csv", stringsAsFactors = FALSE)
+fc<-data.frame(ASO= first$ASO, fc.1 = first$fc  , fc.2 = second$fc)
+fc$mean.fc<-apply(fc[,c("fc.1","fc.2")],1,mean, na.rm=TRUE)
+fc$ASO<-factor(fc$ASO, levels = unique(fc$ASO))
+library(ggplot2)
+combresults<-lm(data=fc, mean.fc ~ ASO)
+coef<-coef(summary(combresults))
+pvals<-coef(summary(combresults))[,4]
+padj<-p.adjust(pvals, "BH")
+summary<-data.frame(ASO = levels(fc$ASO), mean.fc = c(coef[1,1],coef[2:nrow(coef),1]+coef[1,1]), pvals = padj)
+summary$ASO<-factor(summary$ASO, levels = unique(fc$ASO))
+summary$significance = ifelse(pvals1$raw_pval >=0.9, '',
+  ifelse(pvals1$p.adjust<0.001,"***",
+                         ifelse(pvals1$p.adjust<0.01,"**",
+                                ifelse(pvals1$p.adjust<0.05,"*",'ns')
+       )
+)
+)
+
+
+
+```
+
+
+```{r :mean of exp19-26}
+e26<-read.csv(file.path("C:/Users/My computer/Dropbox/CSHL/R/qpcr_analysis/19_26/19_26_qpcr_summary.csv"),stringsAsFactors = FALSE)
+e26mean<-apply(matrix(e26$fc, byrow = TRUE, ncol = 3),1,mean, na.rm =TRUE)
+```
+
+```{r: comparison of 19-24 technical reqplicates and exp19-26}
+
+ggplot() + geom_boxplot(aes(x=fc$ASO, y = fc$mean.fc,col = "exp19-24 mean of tech rep"))+
+  geom_point(aes(x=summary$ASO, y = e26mean[-3], col= "exp19-26"))+
+  geom_text(aes(x = summary$ASO, y = summary$mean.fc+ 2, label = summary$significance))+
+    theme(axis.text.x = element_text(hjust = 1, angle = 45)) +xlab("treatment") + ylab("CFTR fold change") + ggtitle("1924 vs. 26") 
+```
+

@@ -1,0 +1,39 @@
+---
+title: "compare_19_24_vs_26"
+author: "YJ"
+date: "July 15, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+setwd("C:/Users/My computer/Dropbox/CSHL/R/qpcr_analysis")
+e26<-read.csv(file.path("./19_26/19_26_qpcr_summary.csv"),stringsAsFactors = FALSE)
+e24<-read.csv(file.path("./19_24/1924_first_qpcr_summary.csv"),stringsAsFactors = FALSE)
+
+e2426<-data.frame(e24[e24$ASO %in% e26$ASO,c("ASO","fc")]) #filter 1924 data by ones that are in 1926
+
+e2426$ASO<-factor(e2426$ASO,levels=unique(e2426$ASO))
+
+e2624<-data.frame(e26[e26$ASO %in% e24$ASO,c("ASO","fc")]) #filter 1926 data by ones that are in 1924
+
+e2624$ASO<-factor(e2624$ASO, levels = levels(e2426$ASO))
+
+e2624<-e2624[rank(e2624$ASO, ties.method ="first"),]#now sort the e2624 by the ranks of the ASO levels to match the label orders
+
+e<-data.frame(e2426,e2624)
+
+ee<-matrix(e2426$fc, byrow = TRUE, ncol=3)
+eee<-matrix(e2624$fc, byrow = TRUE, ncol=3)
+eiv<-cbind(apply(ee, 1, mean),apply(eee,1,mean, na.rm = TRUE))
+plot(e$fc.1,e$fc)
+```
+```{r}
+ggplot()+ geom_point(aes(x =unique(e2426$ASO), y=eiv[,1], col = "1924")) + 
+  geom_point(aes(x = unique(e2426$ASO), y=eiv[,2], col = "1926")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
